@@ -26,18 +26,28 @@ class TrafficDataLoader:
         if filepath.suffix == ".csv":
             return pd.read_csv(filepath)
         elif filepath.suffix in (".xlsx", ".xls"):
+            if filepath.suffix == ".xls":
+                return pd.read_excel(filepath, sheet_name="Data", header=1)
             return pd.read_excel(filepath)
         else:
             raise ValueError(f"Unsupported file format: {filepath.suffix}")
 
     def preprocess(self, df: pd.DataFrame) -> pd.DataFrame:
         """Clean and preprocess the raw traffic data."""
-        # TODO: Implement data cleaning
-        # - Handle missing values
-        # - Parse date/time columns
-        # - Reshape 15-min interval columns into time series format
-        # - Normalize/scale features
-        raise NotImplementedError("Implement data preprocessing")
+        intervals = [f"V{i:02}" for i in range(96)]
+        keys = ["SCATS Number", "Location", "Date"]
+        frame = df[keys + intervals].copy()
+        frame["Location"] = frame["Location"].str.strip().str.upper()
+        frame["Date"] = pd.to_datetime(frame["Date"]).dt.normalize()
+        frame[intervals] = frame[intervals].apply(pd.to_numeric, errors="coerce")
+        frame[intervals] = frame[intervals].where(frame[intervals] >= 0)
+        # Some site/date labels repeat for movements with distinct volume records.
+        frame = frame.dropna(subset=keys).drop_duplicates()
+        long = frame.melt(keys, intervals, "interval", "volume")
+        long["timestamp"] = long["Date"] + pd.to_timedelta(
+            long["interval"].str[1:].astype(int) * 15, unit="min"
+        )
+        return long.groupby(["timestamp", "SCATS Number"])["volume"].sum(min_count=1).unstack()
 
     def create_sequences(self, data: np.ndarray, seq_length: int) -> tuple:
         """Create input sequences and targets for time series prediction.

@@ -35,3 +35,4 @@ routing:
   speed_limit_kmh: 60
   intersection_delay_sec: 30
   top_k: 5
+  departure: "2006-10-30 08:00"

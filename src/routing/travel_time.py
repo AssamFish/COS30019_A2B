@@ -1,12 +1,4 @@
-"""
-travel_time.py - Convert predicted traffic flow to travel time.
-
-Assumptions:
-- Speed limit: 60 km/h on all links
-- Intersection delay: 30 seconds per controlled intersection
-- Travel time formula based on VicRoads conversion document
-"""
-
+from math import isfinite, sqrt
 
 def flow_to_travel_time(
     volume_per_hour: float,
@@ -25,13 +17,11 @@ def flow_to_travel_time(
     Returns:
         Estimated travel time in seconds
     """
-    # Free-flow travel time
-    free_flow_time = (distance_km / speed_limit_kmh) * 3600  # convert hours to seconds
-
-    # TODO: Apply the VicRoads traffic flow to travel time conversion formula
-    # Adjust free_flow_time based on volume_per_hour
-    # See "Traffic Flow to Travel Time Conversion v1.0.PDF"
-
-    travel_time = free_flow_time + intersection_delay_sec
-
-    return travel_time
+    values = (volume_per_hour, distance_km, speed_limit_kmh, intersection_delay_sec)
+    if not all(isfinite(value) for value in values) or min(values) < 0 or speed_limit_kmh == 0:
+        raise ValueError("Travel-time inputs must be finite and nonnegative, with a positive speed limit")
+    a, b = 1.4648375, 93.75
+    # The handout assumes the uncongested branch. Flows above capacity
+    # are represented by the turning-point speed.
+    speed = min(speed_limit_kmh, (b + sqrt(max(0.0, b * b - 4 * a * volume_per_hour))) / (2 * a))
+    return 3600 * distance_km / speed + intersection_delay_sec

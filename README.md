@@ -10,7 +10,7 @@ This project implements a **Traffic-Based Route Guidance System (TBRGS)** for th
 - **ML Models for Traffic Prediction**:
   - LSTM (Long Short-Term Memory)
   - GRU (Gated Recurrent Unit)
-  - A third model of choice (e.g., Transformer, CNN-LSTM, etc.)
+  - A lag-window multilayer perceptron (MLP)
 - **Model Evaluation**: Comprehensive comparison of ML models (MAE, RMSE, MAPE, R²)
 - **Travel Time Estimation**: Convert predicted traffic flow to travel time using the provided formula
 - **Route Guidance**: Find top-K (up to 5) optimal routes between any two SCATS sites
@@ -37,36 +37,45 @@ A2B/
 └── main.py                 # Entry point
 ```
 
-## Setup
+## Run from the project folder
 
-### Prerequisites
+Install dependencies once, then set the path to the supplied workbook in your VS Code
+PowerShell terminal. Adjust the path if your files are arranged differently.
 
-- Python 3.10+
-- pip
-
-### Installation
-
-```bash
-git clone https://github.com/<your-username>/COS30019-A2B.git
-cd COS30019-A2B
-pip install -r requirements.txt
+```powershell
+python -m pip install -r requirements.txt
+$workbook = "../Intro to Ai assignemtn 2B/Scats Data October 2006.xls"
+python main.py --mode train --epochs 20 --workbook $workbook
+python main.py --mode evaluate --workbook $workbook
+python main.py --mode route --origin 2000 --destination 3002 --workbook $workbook
+python main.py --workbook $workbook
+python -m unittest discover -v
 ```
 
-### Running
+Supply the same workbook and configuration for training, evaluation, and routing.
+Checkpoints are stored locally under `artifacts/`. The GUI accepts a date and time
+on the October 2006 quarter-hour grid, with three hours of prior data required.
 
-```bash
-python main.py
-```
+## How the pipeline works
 
-## Dataset
-
-The system uses the VicRoads Boroondara traffic volume dataset containing SCATS site data with traffic flow counts (number of vehicles) recorded every 15 minutes.
-
-## Assumptions
-
-1. Speed limit on every link is **60 km/h**
-2. Travel time from SCATS site A to B is approximated using accumulated volume per hour at site B and the distance between A and B
-3. Average delay of **30 seconds** at each controlled intersection
+1. Read the workbook Data sheet and convert `V00` through `V95` into quarter-hour
+   counts. Remove exact duplicate count records and sum movement counts by site.
+2. Form 12-interval windows and split targets chronologically into train,
+   validation, and test. Normalization uses training means. Missing inputs are
+   forward-filled and missing held-out targets are omitted from the scores.
+3. Train the LSTM, GRU, and lag-window MLP (`third`) with the same windows. The MLP
+   is the proposed third technique and requires tutor approval. Compare against
+   persistence at 15 minutes and on the sum of four recursive forecasts.
+4. Infer a graph by linking consecutive sites with shared road names. Treat
+   Maroondah Highway and Whitehorse Road as one corridor. Include approximate
+   western connections 4262?4812 and 3001?4821 to join the workbook coverage.
+   Links are bidirectional, with straight-line distances. Verify these
+   approximations before interpreting results as actual road itineraries.
+5. Weight links using the destination's predicted hourly count as specified
+   in the brief. Use the conversion handout's higher-speed root capped at
+   60 km/h and apply a 30-second delay per link. Flows above capacity use
+   the turning-point speed. Reused A2A uniform-cost search yields up to five
+   loopless routes in travel-time order. Each query uses a fixed hourly snapshot.
 
 ## Team
 

@@ -4,8 +4,12 @@ graph.py - Graph representation of the Boroondara road network for route guidanc
 Integrates with Assignment 2A search algorithms to find optimal routes.
 """
 
-from typing import Dict, List, Tuple, Optional
-import heapq
+from itertools import islice
+from math import isfinite
+from typing import Dict, List, Tuple
+
+from A2A.algorithms.cus1 import routes
+from A2A.graph import Graph
 
 
 class RoadNetwork:
@@ -49,6 +53,19 @@ class RoadNetwork:
         Returns:
             List of (path, total_travel_time) tuples, sorted by travel time
         """
-        # TODO: Integrate A2A search algorithms (A*, Dijkstra, etc.)
-        # Use Yen's k-shortest paths or similar algorithm
-        raise NotImplementedError("Integrate A2A search algorithms here")
+        if not 1 <= k <= 5:
+            raise ValueError("k must be between 1 and 5")
+        if origin not in self.sites or destination not in self.sites:
+            raise ValueError("Unknown origin or destination SCATS site")
+        edges = {}
+        for site, neighbours in self.adjacency.items():
+            costs = {}
+            for neighbour, distance in neighbours:
+                cost = travel_time_func(site, neighbour, distance)
+                if not isfinite(cost) or cost < 0:
+                    raise ValueError("Link travel times must be finite and nonnegative")
+                costs[neighbour] = min(cost, costs.get(neighbour, cost))
+            edges[site] = sorted(costs.items())
+        graph = Graph({}, edges, origin, {destination})
+        valid = ((path, cost) for goal, _, path, cost in routes(graph) if goal is not None)
+        return list(islice(valid, k))

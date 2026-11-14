@@ -1,47 +1,76 @@
-"""
-COS30019 Assignment 2B - Traffic-Based Route Guidance System (TBRGS)
-Main entry point for the application.
-"""
+"""Traffic-based route guidance command line and GUI entry point."""
 
 import argparse
+from pathlib import Path
+
+import torch
+import yaml
+
+from src.models.forecast import Forecast, MODELS
+from src.routing.network import build_network
+from src.routing.travel_time import flow_to_travel_time
+
+
+def recommend(forecast, network, model, origin, destination, timestamp, top_k):
+    flow = forecast.hourly_flow(model, timestamp)
+    settings = forecast.config["routing"]
+    return network.find_top_k_routes(
+        origin, destination,
+        lambda _, target, distance: flow_to_travel_time(
+            flow[target], distance, settings["speed_limit_kmh"], settings["intersection_delay_sec"]
+        ),
+        top_k,
+    )
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Traffic-Based Route Guidance System (TBRGS) for Boroondara"
-    )
-    parser.add_argument(
-        "--mode",
-        choices=["gui", "train", "evaluate", "route"],
-        default="gui",
-        help="Run mode: gui (default), train, evaluate, or route",
-    )
-    parser.add_argument("--config", type=str, default="configs/default.yaml", help="Path to config file")
-    parser.add_argument("--model", type=str, choices=["lstm", "gru", "third"], help="Model to train/evaluate")
-    parser.add_argument("--origin", type=int, help="Origin SCATS site number (e.g., 2000)")
-    parser.add_argument("--destination", type=int, help="Destination SCATS site number (e.g., 3002)")
-    parser.add_argument("--top-k", type=int, default=5, help="Number of routes to return (default: 5)")
-
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--mode", choices=("gui", "train", "evaluate", "route"), default="gui")
+    parser.add_argument("--config", type=Path, default=Path("configs/default.yaml"))
+    parser.add_argument("--workbook", type=Path)
+    parser.add_argument("--model", choices=MODELS)
+    parser.add_argument("--epochs", type=int)
+    parser.add_argument("--origin", type=int)
+    parser.add_argument("--destination", type=int)
+    parser.add_argument("--time")
+    parser.add_argument("--top-k", type=int, choices=range(1, 6))
     args = parser.parse_args()
+    if args.epochs is not None and args.epochs < 1:
+        parser.error("--epochs must be positive")
 
-    if args.mode == "gui":
-        # Launch GUI
-        print("Launching TBRGS GUI...")
-        # from src.gui.app import TBRGSApp
-        # app = TBRGSApp(config_path=args.config)
-        # app.run()
-    elif args.mode == "train":
-        print(f"Training {args.model} model...")
-        # TODO: implement training pipeline
+    config = yaml.safe_load(args.config.read_text(encoding="utf-8"))
+    workbook = args.workbook or Path(config["data"]["raw_path"]) / "Scats Data October 2006.xls"
+    if not workbook.is_file():
+        parser.error("Supply the traffic workbook with --workbook")
+    torch.set_num_threads(2)
+    forecast = Forecast(config, workbook, "artifacts")
+    models = (args.model,) if args.model else MODELS
+    if args.mode == "train":
+        for model in models:
+            print(f"Training {model}", flush=True)
+            forecast.train(model, args.epochs)
     elif args.mode == "evaluate":
-        print("Evaluating models...")
-        # TODO: implement evaluation pipeline
-    elif args.mode == "route":
-        if args.origin and args.destination:
-            print(f"Finding top-{args.top_k} routes from {args.origin} to {args.destination}...")
-            # TODO: implement route finding
+        for model in ("persistence", *models):
+            for horizon in (1, 4):
+                metrics = forecast.evaluate(model, horizon)
+                print(f"{model} {15 * horizon} min",
+                      " ".join(f"{key}={value:.4f}" for key, value in metrics.items()))
+    else:
+        network = build_network(forecast.raw)
+        model = args.model or "gru"
+        top_k = args.top_k or config["routing"]["top_k"]
+        timestamp = args.time or config["routing"]["departure"]
+        if args.mode == "gui":
+            from src.gui.app import run
+            run(network, lambda *query: recommend(forecast, network, *query), model, timestamp, top_k)
         else:
-            print("Error: --origin and --destination are required for route mode")
+            if args.origin is None or args.destination is None:
+                parser.error("--origin and --destination are required in route mode")
+            results = recommend(forecast, network, model, args.origin, args.destination, timestamp, top_k)
+            for path, seconds in results:
+                print(f"{' -> '.join(map(str, path))}  ({seconds / 60:.2f} min)")
+            if not results:
+                print("No connection in the estimated road network")
 
 
 if __name__ == "__main__":

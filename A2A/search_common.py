@@ -1,6 +1,9 @@
 """Shared search-tree node structure and expansion helpers."""
 from dataclasses import dataclass
-from graph import Graph
+if __package__:
+    from .graph import Graph
+else:
+    from graph import Graph
 
 @dataclass
 class SearchNode:
