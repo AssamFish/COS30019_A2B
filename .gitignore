@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+venv/
+env/
+.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Data (large files - keep raw data out of git)
+data/raw/*.csv
+data/raw/*.xlsx
+data/processed/
+
+# Model checkpoints
+*.h5
+*.pt
+*.pth
+saved_models/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Reports (optional - uncomment if you want to track reports)
+# reports/*.pdf
+# reports/*.docx
+
+# Logs
+*.log
