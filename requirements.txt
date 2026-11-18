@@ -7,3 +7,4 @@ seaborn>=0.12.0
 tkinter-tooltip>=3.1.0
 xlrd>=2.0.2
 PyYAML>=6
+tkintermapview==1.32

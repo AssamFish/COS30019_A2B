@@ -1,10 +1,11 @@
-"""Desktop trip planner and schematic SCATS network."""
+"""Desktop trip planner with a geographical SCATS map."""
 
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
-from math import cos, radians
 import re
 import tkinter as tk
 from tkinter import ttk
+from tkintermapview import TkinterMapView
 
 
 BG = "#101923"
@@ -42,73 +43,6 @@ def configure_styles(root):
     root.option_add("*TCombobox*Listbox.background", INPUT)
     root.option_add("*TCombobox*Listbox.foreground", TEXT)
     root.option_add("*TCombobox*Listbox.selectBackground", "#284d57")
-
-
-def draw_network(canvas, network, path, zoom, offset, focused):
-    canvas.delete("all")
-    width, height = canvas.winfo_width(), canvas.winfo_height()
-    if width < 80 or height < 80 or not network.sites:
-        return
-    sites = network.sites
-    min_lat, max_lat = min(p["lat"] for p in sites.values()), max(p["lat"] for p in sites.values())
-    min_lon, max_lon = min(p["lon"] for p in sites.values()), max(p["lon"] for p in sites.values())
-    longitude_scale = cos(radians((min_lat + max_lat) / 2))
-    span_x = (max_lon - min_lon) * longitude_scale
-    span_y = max_lat - min_lat
-    scale = min((width - 76) / max(span_x, 1e-9), (height - 76) / max(span_y, 1e-9))
-    scale *= zoom
-    points = {
-        site: (width / 2 + offset[0] + (p["lon"] - (min_lon + max_lon) / 2) * longitude_scale * scale,
-               height / 2 + offset[1] - (p["lat"] - (min_lat + max_lat) / 2) * scale)
-        for site, p in sites.items()
-    }
-
-    for x in range(20, width, 32):
-        for y in range(20, height, 32):
-            canvas.create_oval(x, y, x + 2, y + 2, fill="#243849", outline="")
-    for site in points:
-        for neighbor, _ in network.get_neighbours(site):
-            if site < neighbor:
-                canvas.create_line(*points[site], *points[neighbor], fill="#3c5468", width=2)
-    if len(path) > 1:
-        coords = [value for site in path for value in points[site]]
-        canvas.create_line(*coords, fill="#235762", width=11, joinstyle=tk.ROUND, capstyle=tk.ROUND)
-        canvas.create_line(*coords, fill=ACCENT, width=4, joinstyle=tk.ROUND, capstyle=tk.ROUND)
-
-    for site, (x, y) in points.items():
-        active = site in path
-        radius = 6 if active else 4
-        canvas.create_oval(x - radius, y - radius, x + radius, y + radius,
-                           fill=ACCENT if active else "#93adc0", outline=MAP, width=1, tags=(f"site:{site}",))
-    occupied = [(x - 11, y - 11, x + 11, y + 11) for x, y in points.values()]
-    for site in sorted(points, key=lambda site: (site != focused, site not in path, site)):
-        x, y = points[site]
-        if not (0 <= x <= width and 0 <= y <= height):
-            continue
-        name = intersection_name(sites[site]["name"])
-        item = canvas.create_text(x, y, text=f"{site}  {name}", width=135,
-                                  fill=TEXT if site in path else MUTED, font=(FONT, 8),
-                                  tags=(f"site:{site}",))
-        for dx, dy, anchor in ((13, -7, "sw"), (-13, -7, "se"), (13, 7, "nw"),
-                               (-13, 7, "ne"), (0, -15, "s"), (0, 15, "n")):
-            canvas.coords(item, x + dx, y + dy)
-            canvas.itemconfigure(item, anchor=anchor)
-            left, top, right, bottom = canvas.bbox(item)
-            if (left >= 4 and top >= 4 and right <= width - 4 and bottom <= height - 4
-                    and all(right + 3 < l or left - 3 > r or bottom + 3 < t or top - 3 > b
-                            for l, t, r, b in occupied)):
-                occupied.append((left, top, right, bottom))
-                break
-        else:
-            canvas.delete(item)
-    if path:
-        for site, marker in {path[0]: "A", path[-1]: "A" if len(path) == 1 else "B"}.items():
-            x, y = points[site]
-            canvas.create_oval(x - 10, y - 10, x + 10, y + 10, fill=ACCENT, outline=MAP, width=2, tags=(f"site:{site}",))
-            canvas.create_text(x, y, text=marker, fill=BG, font=(FONT, 9, "bold"), tags=(f"site:{site}",))
-    if focused in points:
-        x, y = points[focused]
-        canvas.create_oval(x - 14, y - 14, x + 14, y + 14, outline="#ffd580", width=2)
 
 
 def intersection_name(description):
@@ -195,78 +129,99 @@ def run(network, recommend, model, timestamp, top_k):
     map_panel.pack(side="left", fill="both", expand=True)
     map_header = tk.Frame(map_panel, bg=PANEL)
     map_header.pack(fill="x", pady=(0, 8))
-    label(map_header, "SCATS network", 14, bold=True).pack(side="left")
-    label(map_header, "A  Start     B  Destination", 9, MUTED).pack(side="right")
+    label(map_header, "Boroondara street map", 14, bold=True).pack(side="left")
+    label(map_header, "B  Destination", 10, "#ffad76", True).pack(side="right")
+    label(map_header, "A  Start", 10, "#77e3a4", True).pack(side="right", padx=(0, 18))
     toolbar = tk.Frame(map_panel, bg=PANEL)
     toolbar.pack(fill="x", pady=(0, 8))
-    canvas = tk.Canvas(map_panel, bg=MAP, width=1, height=1, highlightthickness=0)
-    selection = tk.StringVar(value="The map shows estimated connections between traffic signals.")
+    map_view = TkinterMapView(map_panel, corner_radius=0,
+                             user_agent="COS30019-Boroondara-Route-Guidance/1.0")
+    map_view.set_tile_server("https://tile.openstreetmap.org/{z}/{x}/{y}.png", max_zoom=19)
+    selection = tk.StringVar(value="Choose a trip to show its estimated route.")
     detail = label(map_panel, size=10, color=MUTED, textvariable=selection, justify="left")
     detail.pack(side="bottom", fill="x", pady=(4, 0))
     detail.bind("<Configure>", lambda event: detail.configure(wraplength=max(100, event.width - 8)))
-    point_info = tk.StringVar(value="Click any point for its name and coordinates. Zoom in to see more labels.")
+    point_info = tk.StringVar(value="Click a SCATS pin for its intersection name. Selected routes follow mapped driving roads.")
     point_detail = label(map_panel, size=10, textvariable=point_info, justify="left")
     point_detail.pack(side="bottom", fill="x", pady=(5, 0))
-    canvas.pack(fill="both", expand=True)
+    map_view.pack(fill="both", expand=True)
+    attribution = label(map_panel, "Map data (c) OpenStreetMap contributors | Internet required for street tiles",
+                        8, MUTED, cursor="hand2")
+    attribution.pack(side="bottom", fill="x")
+    attribution.bind("<Button-1>", lambda event: __import__("webbrowser").open(
+        "https://www.openstreetmap.org/copyright"))
     point_detail.bind("<Configure>", lambda event: point_detail.configure(wraplength=max(100, event.width - 8)))
     display = []
-    zoom = 1.0
-    offset = [0, 0]
-    focused = None
-    drag = None
+    markers = {}
+    route_line = None
+    dot = tk.PhotoImage(master=root, width=12, height=12)
+    for y in range(12):
+        for x in range(12):
+            radius_squared = (x - 5.5) ** 2 + (y - 5.5) ** 2
+            if radius_squared <= 30:
+                dot.put("#ffffff" if radius_squared > 16 else "#246b86", (x, y))
 
-    def change_zoom(factor):
-        nonlocal zoom
-        zoom = max(1.0, min(4.0, zoom * factor))
-        if zoom == 1:
-            offset[:] = [0, 0]
-        draw()
+    def inspect_site(site_id):
+        site = network.sites[site_id]
+        point_info.set(f"SCATS {site_id} | {names[site_id]}\n"
+                       f"Latitude {site['lat']:.5f}   Longitude {site['lon']:.5f}")
+
+    for site_id, site in network.sites.items():
+        markers[site_id] = map_view.set_marker(
+            site["lat"], site["lon"], text="", icon=dot,
+            command=lambda marker, site_id=site_id: inspect_site(site_id))
 
     def reset_map():
-        nonlocal zoom, focused
-        zoom, focused = 1.0, None
-        offset[:] = [0, 0]
-        point_info.set("Click any point for its name and coordinates. Zoom in to see more labels.")
-        draw()
+        sites = list(network.sites.values())
+        if sites:
+            map_view.fit_bounding_box(
+                (max(s["lat"] for s in sites) + .005, min(s["lon"] for s in sites) - .005),
+                (min(s["lat"] for s in sites) - .005, max(s["lon"] for s in sites) + .005))
 
-    def start_pan(event):
-        nonlocal drag
-        drag = (event.x, event.y, *offset)
-
-    def pan(event):
-        if drag and zoom > 1:
-            offset[:] = [drag[2] + event.x - drag[0], drag[3] + event.y - drag[1]]
-            draw()
-
-    def inspect(event):
-        nonlocal focused, drag
-        if drag and abs(event.x - drag[0]) + abs(event.y - drag[1]) < 5:
-            for item in reversed(canvas.find_overlapping(event.x - 5, event.y - 5,
-                                                        event.x + 5, event.y + 5)):
-                tag = next((tag for tag in canvas.gettags(item) if tag.startswith("site:")), None)
-                if tag:
-                    focused = int(tag.split(":")[1])
-                    site = network.sites[focused]
-                    point_info.set(f"SCATS {focused} | {names[focused]}\n"
-                                   f"Latitude {site['lat']:.5f}   Longitude {site['lon']:.5f}")
-                    draw()
-                    break
-        drag = None
-
-    for title, action in (("+", lambda: change_zoom(1.4)),
-                          ("-", lambda: change_zoom(1 / 1.4)), ("Reset view", reset_map)):
+    for title, action in (
+        ("Boroondara", reset_map),
+    ):
         tk.Button(toolbar, text=title, command=action, bg=INPUT, fg=TEXT,
                   activebackground=ACCENT, relief="flat", padx=8).pack(side="left", padx=(0, 5))
-    label(toolbar, "Scroll to zoom | Drag to move", 9, MUTED).pack(side="left", padx=5)
-    canvas.bind("<MouseWheel>", lambda event: change_zoom(1.4 if event.delta > 0 else 1 / 1.4))
-    canvas.bind("<ButtonPress-1>", start_pan)
-    canvas.bind("<B1-Motion>", pan)
-    canvas.bind("<ButtonRelease-1>", inspect)
+    root.after(250, reset_map)
+
+    drawing = False
 
     def draw(event=None):
+        nonlocal drawing
+        if drawing:
+            return
+        drawing = True
+        try:
+            redraw()
+        finally:
+            drawing = False
+
+    def redraw():
         selected = results.selection()
         path = display[int(selected[0])][0] if selected else ()
-        draw_network(canvas, network, path, zoom, offset, focused)
+        nonlocal route_line
+        if route_line is not None:
+            route_line.delete()
+            route_line = None
+        for site_id, marker in list(markers.items()):
+            start = bool(path) and site_id == path[0]
+            destination = bool(path) and site_id == path[-1]
+            title = "A / B" if start and destination else "A" if start else "B" if destination else ""
+            color = "#168447" if start else "#d45716" if destination else "#246b86"
+            site = network.sites[site_id]
+            marker.delete()
+            markers[site_id] = map_view.set_marker(
+                site["lat"], site["lon"],
+                text=title, icon=None if title else dot,
+                marker_color_circle="#ffffff", marker_color_outside=color,
+                text_color=color if title else "#16384a",
+                font=(FONT, 12, "bold") if title else (FONT, 9),
+                command=lambda marker, site_id=site_id: inspect_site(site_id))
+        if len(path) > 1:
+            route_line = map_view.set_path(
+                network.route_geometry[tuple(path)],
+                color="#008c83", width=5)
         if path:
             index = int(selected[0])
             selection.set(f"{'Fastest route' if index == 0 else f'Route {index + 1}'}"
@@ -278,17 +233,36 @@ def run(network, recommend, model, timestamp, top_k):
 
     status = tk.StringVar(value="Choose your trip settings, then find routes.")
 
-    def update():
-        values = {key: field.get() for key, field in fields.items()}
+    worker = ThreadPoolExecutor(max_workers=1)
+
+    def finish(future):
+        if not future.done():
+            root.after(100, lambda: finish(future))
+            return
+        find_button.configure(state="normal")
         try:
-            routes = recommend(model_names[values["model"]], site_options[values["origin"]],
-                               site_options[values["destination"]], f"{values['date']} {values['time']}", int(values["limit"]))
+            routes = future.result()
         except FileNotFoundError:
-            status.set(f"Train the {values['model']} model before using it to find routes.")
+            status.set("Train the selected model before finding routes.")
             return
         except (ValueError, OSError, KeyError) as exc:
             status.set(str(exc))
             return
+        show_routes(routes)
+
+    def update():
+        if find_button["state"] == "disabled":
+            return
+        values = {key: field.get() for key, field in fields.items()}
+        find_button.configure(state="disabled")
+        status.set("Predicting traffic and checking driving roads...")
+        future = worker.submit(
+            recommend, model_names[values["model"]], site_options[values["origin"]],
+            site_options[values["destination"]], f"{values['date']} {values['time']}",
+            int(values["limit"]))
+        root.after(100, lambda: finish(future))
+
+    def show_routes(routes):
         results.delete(*results.get_children())
         display[:] = routes
         for index, (path, seconds) in enumerate(routes):
@@ -306,12 +280,15 @@ def run(network, recommend, model, timestamp, top_k):
             status.set("Try a different origin or destination.")
         draw()
 
-    tk.Button(form, text="Find routes", command=update, bg=ACCENT, fg=BG,
+    find_button = tk.Button(form, text="Find routes", command=update, bg=ACCENT, fg=BG,
               activebackground="#9af2e3", activeforeground=BG, relief="flat",
-              font=(FONT, 11, "bold"), cursor="hand2", pady=4).pack(fill="x", pady=(8, 4))
+              font=(FONT, 11, "bold"), cursor="hand2", pady=4)
+    find_button.pack(fill="x", pady=(8, 4))
     label(form, size=9, color=MUTED, textvariable=status, wraplength=210,
           justify="left").pack(fill="x")
     results.bind("<<TreeviewSelect>>", draw)
-    canvas.bind("<Configure>", draw)
     root.bind("<Return>", lambda event: update())
-    root.mainloop()
+    try:
+        root.mainloop()
+    finally:
+        worker.shutdown(wait=False, cancel_futures=True)

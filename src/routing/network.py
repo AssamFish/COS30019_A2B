@@ -1,11 +1,15 @@
-"""Estimate connections from shared road names and the workbook coordinates."""
+﻿"""Load the locally prepared, road-validated SCATS network."""
 
-from collections import defaultdict
-from itertools import pairwise
+import hashlib
+import json
 from math import asin, cos, radians, sin, sqrt
-import re
+from pathlib import Path
+
+import requests
 
 from .graph import RoadNetwork
+
+NETWORK_FILE = Path(__file__).resolve().parents[2] / "data/roads/network.json"
 
 
 def distance_km(first, second):
@@ -15,44 +19,61 @@ def distance_km(first, second):
     return 6371 * 2 * asin(min(1, sqrt(a)))
 
 
-def build_network(raw):
-    network = RoadNetwork()
-    roads = defaultdict(set)
-    points = {}
-    for site, rows in raw.groupby("SCATS Number"):
-        coords = rows[["NB_LATITUDE", "NB_LONGITUDE"]].dropna().drop_duplicates()
-        if coords.empty:
-            continue
-        points[site] = tuple(coords.median())
-        labels = rows["Location"].dropna().unique()
-        if not len(labels):
-            continue
-        network.add_site(site, labels[0], *points[site])
-        for label in labels:
-            parts = re.split(r"\s+(?:N|S|E|W|NE|NW|SE|SW)\s+OF\s+", label.upper())
-            for part in parts:
-                name = re.sub(r"[^A-Z0-9]+", " ", part).strip()
-                name = re.sub(r"\bROAD$", "RD", name)
-                name = re.sub(r"\bSTREET$", "ST", name)
-                if name:
-                    roads[name].add(site)
+class DrivingNetwork(RoadNetwork):
+    """SCATS links backed by road geometry, with whole-route turn validation."""
 
-    # Maroondah Highway is labelled Whitehorse Road farther west.
-    roads["WHITEHORSE RD"].update(roads.pop("MAROONDAH HWY", set()))
-    edges = set()
-    for sites in roads.values():
-        lat_range = max(points[s][0] for s in sites) - min(points[s][0] for s in sites)
-        lon_range = max(points[s][1] for s in sites) - min(points[s][1] for s in sites)
-        axis = 0 if lat_range > 0.79 * lon_range else 1
-        ordered = sorted(sites, key=lambda s: (points[s][axis], s))
-        edges.update(tuple(sorted(pair)) for pair in pairwise(ordered))
-    # Workbook road labels leave two western sites without shared-road neighbors.
-    # These approximate arterial connections bridge intersections absent from SCATS.
-    edges.update({(4262, 4812), (3001, 4821)})
-    for first, second in sorted(edges):
-        if first not in network.sites or second not in network.sites:
-            continue
-        distance = distance_km(points[first], points[second])
-        network.add_edge(first, second, distance)
-        network.add_edge(second, first, distance)
+    def __init__(self):
+        super().__init__()
+        self.link_geometry = {}
+        self.route_geometry = {}
+        self.cache_file = Path(__file__).resolve().parents[2] / "artifacts/driving-routes.json"
+        self.route_cache = json.loads(self.cache_file.read_text()) if self.cache_file.exists() else {}
+
+    def driving_route(self, path):
+        if len(path) < 2:
+            return {"legs": [], "geometry": []}
+        positions = [(self.sites[s]["lon"], self.sites[s]["lat"]) for s in path]
+        coordinates = ";".join(f"{lon},{lat}" for lon, lat in positions)
+        key = hashlib.sha256(coordinates.encode()).hexdigest()
+        if key not in self.route_cache:
+            try:
+                response = requests.get(
+                    f"https://router.project-osrm.org/route/v1/driving/{coordinates}",
+                    params={"overview": "full", "geometries": "geojson",
+                            "continue_straight": "true"},
+                    headers={"User-Agent": "COS30019-Boroondara-Route-Guidance/1.0"},
+                    timeout=30)
+                response.raise_for_status()
+                result = response.json()
+            except requests.RequestException as exc:
+                raise ValueError("Road validation is unavailable. Connect to the internet and try again.") from exc
+            if result.get("code") != "Ok" or not result.get("routes"):
+                raise ValueError("No drivable route could be verified through these sites.")
+            route = result["routes"][0]
+            self.route_cache[key] = {
+                "legs": [leg["distance"] / 1000 for leg in route["legs"]],
+                "geometry": [[lat, lon] for lon, lat in route["geometry"]["coordinates"]],
+            }
+            self.cache_file.parent.mkdir(parents=True, exist_ok=True)
+            temporary = self.cache_file.with_suffix(".tmp")
+            temporary.write_text(json.dumps(self.route_cache), encoding="utf-8")
+            temporary.replace(self.cache_file)
+        return self.route_cache[key]
+
+
+def build_network(raw):
+    if not NETWORK_FILE.exists():
+        raise ValueError("The prepared road network is missing. Restore data/roads/network.json.")
+    data = json.loads(NETWORK_FILE.read_text(encoding="utf-8"))
+    network = DrivingNetwork()
+    for site in sorted(set(raw["SCATS Number"])):
+        info = data["sites"].get(str(site))
+        if info is None:
+            raise ValueError(f"SCATS {site} is missing from the prepared road network.")
+        network.add_site(int(site), info["name"], info["lat"], info["lon"])
+    for link in data["links"]:
+        first, second = link["from"], link["to"]
+        if first in network.sites and second in network.sites:
+            network.add_edge(first, second, link["distance_km"])
+            network.link_geometry[first, second] = link["geometry"]
     return network

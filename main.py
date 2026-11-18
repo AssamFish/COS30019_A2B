@@ -14,13 +14,24 @@ from src.routing.travel_time import flow_to_travel_time
 def recommend(forecast, network, model, origin, destination, timestamp, top_k):
     flow = forecast.hourly_flow(model, timestamp)
     settings = forecast.config["routing"]
-    return network.find_top_k_routes(
+    candidates = network.find_top_k_routes(
         origin, destination,
         lambda _, target, distance: flow_to_travel_time(
             flow[target], distance, settings["speed_limit_kmh"], settings["intersection_delay_sec"]
         ),
         top_k,
     )
+    validated = []
+    for path, _ in candidates:
+        road = network.driving_route(path)
+        seconds = sum(
+            flow_to_travel_time(flow[target], distance, settings["speed_limit_kmh"],
+                                settings["intersection_delay_sec"])
+            for target, distance in zip(path[1:], road["legs"])
+        )
+        network.route_geometry[tuple(path)] = road["geometry"]
+        validated.append((path, seconds))
+    return sorted(validated, key=lambda result: result[1])
 
 
 def main():

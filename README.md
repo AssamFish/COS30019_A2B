@@ -66,16 +66,45 @@ on the October 2006 quarter-hour grid, with three hours of prior data required.
 3. Train the LSTM, GRU, and lag-window MLP (`third`) with the same windows. The MLP
    is the proposed third technique and requires tutor approval. Compare against
    persistence at 15 minutes and on the sum of four recursive forecasts.
-4. Infer a graph by linking consecutive sites with shared road names. Treat
-   Maroondah Highway and Whitehorse Road as one corridor. Include approximate
-   western connections 4262?4812 and 3001?4821 to join the workbook coverage.
-   Links are bidirectional, with straight-line distances. Verify these
-   approximations before interpreting results as actual road itineraries.
-5. Weight links using the destination's predicted hourly count as specified
-   in the brief. Use the conversion handout's higher-speed root capped at
-   60 km/h and apply a 30-second delay per link. Flows above capacity use
-   the turning-point speed. Reused A2A uniform-cost search yields up to five
-   loopless routes in travel-time order. Each query uses a fixed hourly snapshot.
+4. Load the prepared road network from `data/roads/network.json`. Intersection
+   road names are matched to OpenStreetMap nodes to correct the workbook's
+   coordinate offset. Each directed link has an OSRM-verified driving distance
+   and full road geometry. Links that bypass another modeled SCATS intersection
+   are split so that site's traffic can contribute to travel time.
+5. Weight links with predicted destination-site hourly counts, the supplied
+   quadratic conversion, a 60 km/h cap and a 30-second intersection delay.
+   A2A uniform-cost search finds alternatives in this modeled network.
+6. Validate each complete candidate with OSRM's driving profile and
+   `continue_straight=true` to account for permitted turns across link boundaries.
+   Recalculate estimates from the returned road-leg distances and sort the
+   validated candidates. The GUI draws this full driving geometry. First-time
+   route validation requires internet. Successful validations are cached locally
+   under `artifacts/driving-routes.json`; unavailable validation reports an error.
+
+## Road data and interpretation
+
+The network contains 40 sites and 104 directed road links. Candidate corridors
+come from the supplied road labels, with the western connections independently
+checked by the driving service. Alternatives are limited to this modeled
+SCATS network. The current road snapshot is combined with October 2006 traffic
+counts, so the estimates describe an assignment simulation. Live incidents,
+current congestion and temporary closures are outside this model.
+
+OpenStreetMap contributors supply the streets and intersection coordinates
+under the ODbL. See https://www.openstreetmap.org/copyright.
+OSRM supplies driving geometry and road distances through
+https://router.project-osrm.org. API documentation is at
+https://project-osrm.org/docs/v5.24.0/api/.
+No OSRM travel durations are substituted for the assignment's predicted costs.
+
+To rebuild road data, `tools/download_roads.py WORKBOOK` downloads snapshots around
+the SCATS sites. `tools/build_road_network.py WORKBOOK` matches intersections
+and verifies candidate links. These preparation steps require internet and
+respect sequential request spacing. Normal launches use the prepared
+`network.json`. Raw OSM snapshots are excluded from Git.
+
+The existing PDF report draft describes the earlier schematic network and
+must be revised to reflect this implementation before submission.
 
 ## Team
 

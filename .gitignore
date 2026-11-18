@@ -47,3 +47,7 @@ Thumbs.db
 
 .venv-deps/
 artifacts/
+
+# Raw OSM snapshots used when preparing the road network
+data/roads/site-*.json
+data/roads/validated-links.json
