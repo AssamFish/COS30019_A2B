@@ -54,7 +54,7 @@ def main():
     if not workbook.is_file():
         parser.error("Supply the traffic workbook with --workbook")
     torch.set_num_threads(2)
-    forecast = Forecast(config, workbook, "artifacts")
+    forecast = Forecast(config, workbook, Path(__file__).resolve().parent / "artifacts")
     models = (args.model,) if args.model else MODELS
     if args.mode == "train":
         for model in models:
