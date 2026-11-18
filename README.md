@@ -118,3 +118,13 @@ must be revised to reflect this implementation before submission.
 ## License
 
 This project is for academic purposes only (Swinburne University of Technology).
+
+
+## Kuching demonstration
+
+Click **Kuching demo** above the Boroondara map to open an additional driving
+planner for Swinburne Sarawak, Kuching Waterfront and Vivacity Megamall.
+The demonstration uses OpenStreetMap landmark coordinates and OSRM driving
+alternatives with baseline road-speed estimates. It requires internet.
+The Boroondara-trained traffic models apply to the Boroondara assignment area.
+Kuching traffic forecasting would require a local training and evaluation dataset.

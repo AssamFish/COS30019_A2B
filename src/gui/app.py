@@ -183,6 +183,12 @@ def run(network, recommend, model, timestamp, top_k):
     ):
         tk.Button(toolbar, text=title, command=action, bg=INPUT, fg=TEXT,
                   activebackground=ACCENT, relief="flat", padx=8).pack(side="left", padx=(0, 5))
+    def open_kuching():
+        from .kuching import open_demo
+        open_demo(root)
+
+    tk.Button(toolbar, text="Kuching demo", command=open_kuching, bg=INPUT, fg=TEXT,
+              activebackground=ACCENT, relief="flat", padx=8).pack(side="left", padx=(0, 5))
     root.after(250, reset_map)
 
     drawing = False
