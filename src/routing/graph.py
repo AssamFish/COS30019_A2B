@@ -4,12 +4,17 @@ graph.py - Graph representation of the Boroondara road network for route guidanc
 Integrates with Assignment 2A search algorithms to find optimal routes.
 """
 
-from itertools import islice
 from math import isfinite
 from typing import Dict, List, Tuple
 
-from A2A.algorithms.cus1 import routes
+from A2A.algorithms import dfs, bfs, gbfs, astar, cus1, cus2
 from A2A.graph import Graph
+
+
+SEARCH_ALGORITHMS = {
+    "DFS": dfs.routes, "BFS": bfs.routes, "GBFS": gbfs.routes,
+    "AS": astar.routes, "CUS1": cus1.routes, "CUS2": cus2.routes,
+}
 
 
 class RoadNetwork:
@@ -41,8 +46,9 @@ class RoadNetwork:
         destination: int,
         travel_time_func,
         k: int = 5,
+        algorithm: str = "CUS1",
     ) -> List[Tuple[List[int], float]]:
-        """Find top-k shortest routes from origin to destination.
+        """Collect up to k loopless routes in the selected search discovery order.
 
         Args:
             origin: Origin SCATS site number
@@ -51,8 +57,11 @@ class RoadNetwork:
             k: Number of routes to return
 
         Returns:
-            List of (path, total_travel_time) tuples, sorted by travel time
+            List of (path, total_travel_time) tuples in algorithm discovery order
         """
+        algorithm = algorithm.upper()
+        if algorithm not in SEARCH_ALGORITHMS:
+            raise ValueError(f"Unknown search algorithm: {algorithm}")
         if not 1 <= k <= 5:
             raise ValueError("k must be between 1 and 5")
         if origin not in self.sites or destination not in self.sites:
@@ -66,6 +75,14 @@ class RoadNetwork:
                     raise ValueError("Link travel times must be finite and nonnegative")
                 costs[neighbour] = min(cost, costs.get(neighbour, cost))
             edges[site] = sorted(costs.items())
-        graph = Graph({}, edges, origin, {destination})
-        valid = ((path, cost) for goal, _, path, cost in routes(graph) if goal is not None)
-        return list(islice(valid, k))
+        coordinates = {site: (info["lon"], info["lat"]) for site, info in self.sites.items()}
+        graph = Graph(coordinates, edges, origin, {destination})
+        found = []
+        created = 0
+        for goal, created, path, cost in SEARCH_ALGORITHMS[algorithm](graph):
+            if goal is not None:
+                found.append((path, cost))
+                if len(found) == k:
+                    break
+        self.last_search = {"algorithm": algorithm, "nodes_created": created}
+        return found

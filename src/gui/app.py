@@ -3,6 +3,8 @@
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 import re
+import json
+from pathlib import Path
 import tkinter as tk
 from tkinter import ttk
 from tkintermapview import TkinterMapView
@@ -51,7 +53,7 @@ def intersection_name(description):
     return " & ".join(part.replace("_", " ").title() for part in parts)
 
 
-def run(network, recommend, model, timestamp, top_k):
+def run(network, recommend, model, timestamp, top_k, algorithm="CUS1"):
     root = tk.Tk()
     root.title("Boroondara Traffic Route Guidance")
     root.configure(bg=BG)
@@ -60,8 +62,8 @@ def run(network, recommend, model, timestamp, top_k):
     configure_styles(root)
 
     header = tk.Frame(root, bg=BG)
-    header.pack(fill="x", padx=24, pady=(10, 8))
-    label(header, "Boroondara Traffic Route Guidance", 23, bold=True).pack(anchor="w")
+    header.pack(fill="x", padx=24, pady=(6, 6))
+    label(header, "Boroondara Traffic Route Guidance", 21, bold=True).pack(anchor="w")
     label(header, "Historical SCATS forecasts  /  October 2006", 10, MUTED).pack(anchor="w", pady=(3, 0))
 
     layout = tk.Frame(root, bg=BG)
@@ -71,21 +73,30 @@ def run(network, recommend, model, timestamp, top_k):
     sidebar.pack_propagate(False)
     form = tk.Frame(sidebar, bg=PANEL, padx=14, pady=8)
     form.pack(fill="x")
-    label(form, "Plan a trip", 16, bold=True).pack(fill="x", pady=(0, 7))
 
     names = {site: intersection_name(info["name"]) for site, info in network.sites.items()}
     site_options = {f"{site} | {names[site]}": site for site in sorted(names)}
     site_labels = {site: option for option, site in site_options.items()}
     model_names = {"LSTM": "lstm", "GRU": "gru", "MLP": "third"}
+    search_names = {
+        "DFS - Depth first": "DFS", "BFS - Breadth first": "BFS",
+        "GBFS - Greedy best first": "GBFS", "A* - Travel time": "AS",
+        "CUS1 - Uniform cost": "CUS1", "CUS2 - Fewest links": "CUS2",
+    }
+    display_search = next(title for title, key in search_names.items() if key == algorithm)
     display_model = next(name for name, key in model_names.items() if key == model)
     departure = datetime.fromisoformat(str(timestamp))
     first_day = departure.replace(day=1)
     dates = tuple((first_day + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(31))
     times = tuple(f"{hour:02d}:{minute:02d}" for hour in range(24) for minute in (0, 15, 30, 45))
+    presets = json.loads((Path(__file__).resolve().parents[2] / "data/roads/test-routes.json").read_text())
+    test_routes = {f"{index + 1}. {case['title']}": case for index, case in enumerate(presets)}
     fields = {}
     departure_row = tk.Frame(form, bg=PANEL)
     settings_row = tk.Frame(form, bg=PANEL)
     for key, title, default, choices in (
+        ("algorithm", "Search algorithm", display_search, tuple(search_names)),
+        ("test", "Test route (15 real trips)", "Custom trip", ("Custom trip", *test_routes)),
         ("origin", "From", site_labels.get(2000, next(iter(site_options), "")), tuple(site_options)),
         ("destination", "To", site_labels.get(3002, next(iter(site_options), "")), tuple(site_options)),
         ("date", "Departure date", departure.strftime("%Y-%m-%d"), dates),
@@ -100,7 +111,7 @@ def run(network, recommend, model, timestamp, top_k):
                 row.pack(fill="x")
             field = tk.Frame(row, bg=PANEL)
             field.pack(side="left", fill="x", expand=True, padx=(0, 5) if key in ("date", "model") else 0)
-        label(field, title, 10, MUTED, True).pack(fill="x", pady=(5, 2))
+        label(field, title, 9, MUTED, True).pack(fill="x", pady=(2, 0))
         variable = fields[key] = tk.StringVar(value=str(default))
         if choices:
             widget = ttk.Combobox(field, textvariable=variable, values=choices,
@@ -109,6 +120,10 @@ def run(network, recommend, model, timestamp, top_k):
         else:
             widget = ttk.Entry(form, textvariable=variable, width=30, style="Trip.TEntry")
         widget.pack(fill="x")
+        if key == "test":
+            widget.bind("<<ComboboxSelected>>", lambda event: apply_test_route())
+        elif key in ("origin", "destination", "date", "time", "limit"):
+            widget.bind("<<ComboboxSelected>>", lambda event: fields["test"].set("Custom trip"))
 
     results_panel = tk.Frame(sidebar, bg=PANEL, padx=14, pady=10)
     results_panel.pack(fill="both", expand=True, pady=(8, 0))
@@ -230,7 +245,7 @@ def run(network, recommend, model, timestamp, top_k):
                 color="#008c83", width=5)
         if path:
             index = int(selected[0])
-            selection.set(f"{'Fastest route' if index == 0 else f'Route {index + 1}'}"
+            selection.set(f"{'Best returned route' if index == 0 else f'Route {index + 1}'}"
                           f" | {display[index][1] / 60:.2f} min\n"
                           f"{names[path[0]]} to {names[path[-1]]}\n"
                           + "  >  ".join(map(str, path)))
@@ -238,6 +253,27 @@ def run(network, recommend, model, timestamp, top_k):
             selection.set("Select a route to highlight it on the map.")
 
     status = tk.StringVar(value="Choose your trip settings, then find routes.")
+
+    def apply_test_route():
+        case = test_routes.get(fields["test"].get())
+        if case is None:
+            return
+        if find_button["state"] == "disabled":
+            fields["test"].set("Custom trip")
+            return
+        fields["origin"].set(site_labels[case["origin"]])
+        fields["destination"].set(site_labels[case["destination"]])
+        date, time = case["departure"].split()
+        fields["date"].set(date)
+        fields["time"].set(time)
+        fields["limit"].set(str(case["top_k"]))
+        results.delete(*results.get_children())
+        display.clear()
+        summary.set("Click Find routes to run this test.")
+        status.set("Test loaded. Click Find routes.")
+        draw()
+        point_info.set(case["description"])
+        reset_map()
 
     worker = ThreadPoolExecutor(max_workers=1)
 
@@ -265,7 +301,7 @@ def run(network, recommend, model, timestamp, top_k):
         future = worker.submit(
             recommend, model_names[values["model"]], site_options[values["origin"]],
             site_options[values["destination"]], f"{values['date']} {values['time']}",
-            int(values["limit"]))
+            int(values["limit"]), search_names[values["algorithm"]])
         root.after(100, lambda: finish(future))
 
     def show_routes(routes):
@@ -273,14 +309,15 @@ def run(network, recommend, model, timestamp, top_k):
         display[:] = routes
         for index, (path, seconds) in enumerate(routes):
             results.insert("", "end", iid=str(index),
-                           values=("1   Fastest" if index == 0 else str(index + 1), f"{seconds / 60:.2f}"),
+                           values=("1   Best" if index == 0 else str(index + 1), f"{seconds / 60:.2f}"),
                            tags=("alternate",) if index % 2 else ())
         if routes:
             results.selection_set("0")
         if routes:
             count = "1 route" if len(routes) == 1 else f"{len(routes)} routes"
-            summary.set(f"{count} found | Fastest {routes[0][1] / 60:.2f} min")
-            status.set("Select any route in the table to see it on the map.")
+            summary.set(f"{count} found | Best {routes[0][1] / 60:.2f} min")
+            search = network.last_search
+            status.set(f"{search['algorithm']} | {search['nodes_created']} search nodes created.")
         else:
             summary.set("No route found for this trip.")
             status.set("Try a different origin or destination.")
@@ -290,7 +327,7 @@ def run(network, recommend, model, timestamp, top_k):
               activebackground="#9af2e3", activeforeground=BG, relief="flat",
               font=(FONT, 11, "bold"), cursor="hand2", pady=4)
     find_button.pack(fill="x", pady=(8, 4))
-    label(form, size=9, color=MUTED, textvariable=status, wraplength=210,
+    label(form, size=9, color=MUTED, textvariable=status, wraplength=235,
           justify="left").pack(fill="x")
     results.bind("<<TreeviewSelect>>", draw)
     root.bind("<Return>", lambda event: update())

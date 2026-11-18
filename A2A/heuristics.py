@@ -1,6 +1,9 @@
 """Admissible distance-based estimates for informed searches."""
 import math
-from graph import Graph
+if __package__:
+    from .graph import Graph
+else:
+    from graph import Graph
 
 def euclidean(a: tuple[float, float], b: tuple[float, float]) -> float:
     return math.dist(a, b)

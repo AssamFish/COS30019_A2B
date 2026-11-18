@@ -1,0 +1,38 @@
+{
+  "name": "nonconsecutive_sites",
+  "description": "SCATS IDs are labels and may have large gaps.",
+  "coordinates": {
+    "970": [
+      0.0,
+      194.0
+    ],
+    "2000": [
+      0.0,
+      400.0
+    ],
+    "3127": [
+      2.0,
+      625.0
+    ]
+  },
+  "edges": [
+    [
+      970,
+      2000,
+      60
+    ],
+    [
+      2000,
+      3127,
+      60
+    ],
+    [
+      970,
+      3127,
+      180
+    ]
+  ],
+  "origin": 970,
+  "destination": 3127,
+  "k": 5
+}

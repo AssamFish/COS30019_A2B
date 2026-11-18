@@ -1,0 +1,122 @@
+[
+  {
+    "title": "Longest modeled trip",
+    "origin": 970,
+    "destination": 2846,
+    "departure": "2006-10-30 08:00",
+    "top_k": 5,
+    "description": "Largest shortest-road distance among the 40 sites in this network (14.25 km)."
+  },
+  {
+    "title": "Complex central alternatives",
+    "origin": 2000,
+    "destination": 3002,
+    "departure": "2006-10-30 08:00",
+    "top_k": 5,
+    "description": "Compare five alternatives across the connected central road corridors."
+  },
+  {
+    "title": "Short neighbouring trip",
+    "origin": 2000,
+    "destination": 3685,
+    "departure": "2006-10-30 08:00",
+    "top_k": 5,
+    "description": "A short trip between neighbouring Warrigal Road sites."
+  },
+  {
+    "title": "Reverse short trip",
+    "origin": 3685,
+    "destination": 2000,
+    "departure": "2006-10-30 08:00",
+    "top_k": 5,
+    "description": "Reverse the neighbouring trip to compare directed road access."
+  },
+  {
+    "title": "Warrigal corridor",
+    "origin": 970,
+    "destination": 2200,
+    "departure": "2006-10-30 08:00",
+    "top_k": 5,
+    "description": "A longer south-to-north trip along the eastern part of the network."
+  },
+  {
+    "title": "Canterbury east to west",
+    "origin": 3126,
+    "destination": 3120,
+    "departure": "2006-10-30 08:00",
+    "top_k": 5,
+    "description": "Travel from Warrigal Road toward Burke Road along Canterbury Road."
+  },
+  {
+    "title": "Northern intersections",
+    "origin": 2827,
+    "destination": 3180,
+    "departure": "2006-10-30 08:00",
+    "top_k": 5,
+    "description": "Test routes through the northern Doncaster Road area."
+  },
+  {
+    "title": "Western intersections",
+    "origin": 4812,
+    "destination": 4821,
+    "departure": "2006-10-30 08:00",
+    "top_k": 5,
+    "description": "Travel between Swan Street and Victoria Street sites."
+  },
+  {
+    "title": "South to north",
+    "origin": 2846,
+    "destination": 2820,
+    "departure": "2006-10-30 08:00",
+    "top_k": 5,
+    "description": "Cross the network from the southern High Street area to the northern sites."
+  },
+  {
+    "title": "Morning departure",
+    "origin": 2000,
+    "destination": 3127,
+    "departure": "2006-10-30 08:00",
+    "top_k": 5,
+    "description": "Compare this same trip at different departure times."
+  },
+  {
+    "title": "Evening departure",
+    "origin": 2000,
+    "destination": 3127,
+    "departure": "2006-10-30 17:00",
+    "top_k": 5,
+    "description": "Same endpoints as the morning case, departing at 17:00."
+  },
+  {
+    "title": "Midday departure",
+    "origin": 2000,
+    "destination": 3127,
+    "departure": "2006-10-30 13:00",
+    "top_k": 5,
+    "description": "Same endpoints, departing at 13:00 for a time-of-day comparison."
+  },
+  {
+    "title": "Weekend departure",
+    "origin": 2000,
+    "destination": 3127,
+    "departure": "2006-10-29 08:00",
+    "top_k": 5,
+    "description": "Same endpoints on Sunday 29 October for a weekday/weekend comparison."
+  },
+  {
+    "title": "Assignment example",
+    "origin": 2000,
+    "destination": 3002,
+    "departure": "2006-10-30 08:00",
+    "top_k": 1,
+    "description": "The example origin and destination from the assignment brief."
+  },
+  {
+    "title": "Start equals destination",
+    "origin": 2000,
+    "destination": 2000,
+    "departure": "2006-10-30 08:00",
+    "top_k": 5,
+    "description": "Expected result is a zero-minute journey with no road links."
+  }
+]

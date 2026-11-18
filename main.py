@@ -11,7 +11,7 @@ from src.routing.network import build_network
 from src.routing.travel_time import flow_to_travel_time
 
 
-def recommend(forecast, network, model, origin, destination, timestamp, top_k):
+def recommend(forecast, network, model, origin, destination, timestamp, top_k, algorithm="CUS1"):
     flow = forecast.hourly_flow(model, timestamp)
     settings = forecast.config["routing"]
     candidates = network.find_top_k_routes(
@@ -20,6 +20,7 @@ def recommend(forecast, network, model, origin, destination, timestamp, top_k):
             flow[target], distance, settings["speed_limit_kmh"], settings["intersection_delay_sec"]
         ),
         top_k,
+        algorithm,
     )
     validated = []
     for path, _ in candidates:
@@ -44,6 +45,7 @@ def main():
     parser.add_argument("--origin", type=int)
     parser.add_argument("--destination", type=int)
     parser.add_argument("--time")
+    parser.add_argument("--algorithm", choices=("DFS", "BFS", "GBFS", "AS", "CUS1", "CUS2"), default="CUS1")
     parser.add_argument("--top-k", type=int, choices=range(1, 6))
     args = parser.parse_args()
     if args.epochs is not None and args.epochs < 1:
@@ -73,11 +75,11 @@ def main():
         timestamp = args.time or config["routing"]["departure"]
         if args.mode == "gui":
             from src.gui.app import run
-            run(network, lambda *query: recommend(forecast, network, *query), model, timestamp, top_k)
+            run(network, lambda *query: recommend(forecast, network, *query), model, timestamp, top_k, args.algorithm)
         else:
             if args.origin is None or args.destination is None:
                 parser.error("--origin and --destination are required in route mode")
-            results = recommend(forecast, network, model, args.origin, args.destination, timestamp, top_k)
+            results = recommend(forecast, network, model, args.origin, args.destination, timestamp, top_k, args.algorithm)
             for path, seconds in results:
                 print(f"{' -> '.join(map(str, path))}  ({seconds / 60:.2f} min)")
             if not results:

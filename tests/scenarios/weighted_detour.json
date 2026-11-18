@@ -1,0 +1,47 @@
+{
+  "name": "weighted_detour",
+  "description": "A three-link route is quicker than the direct road.",
+  "coordinates": {
+    "1": [
+      1.0,
+      0.0
+    ],
+    "2": [
+      2.0,
+      0.0
+    ],
+    "3": [
+      3.0,
+      0.0
+    ],
+    "4": [
+      4.0,
+      0.0
+    ]
+  },
+  "edges": [
+    [
+      1,
+      4,
+      300
+    ],
+    [
+      1,
+      2,
+      30
+    ],
+    [
+      2,
+      3,
+      30
+    ],
+    [
+      3,
+      4,
+      30
+    ]
+  ],
+  "origin": 1,
+  "destination": 4,
+  "k": 5
+}

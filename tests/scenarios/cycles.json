@@ -1,0 +1,52 @@
+{
+  "name": "cycles",
+  "description": "Road cycles must never create repeated sites in a result.",
+  "coordinates": {
+    "1": [
+      1.0,
+      0.0
+    ],
+    "2": [
+      2.0,
+      0.0
+    ],
+    "3": [
+      3.0,
+      0.0
+    ],
+    "4": [
+      4.0,
+      0.0
+    ]
+  },
+  "edges": [
+    [
+      1,
+      2,
+      30
+    ],
+    [
+      2,
+      3,
+      30
+    ],
+    [
+      3,
+      1,
+      30
+    ],
+    [
+      3,
+      4,
+      30
+    ],
+    [
+      2,
+      4,
+      90
+    ]
+  ],
+  "origin": 1,
+  "destination": 4,
+  "k": 5
+}

@@ -128,3 +128,53 @@ The demonstration uses OpenStreetMap landmark coordinates and OSRM driving
 alternatives with baseline road-speed estimates. It requires internet.
 The Boroondara-trained traffic models apply to the Boroondara assignment area.
 Kuching traffic forecasting would require a local training and evaluation dataset.
+
+## Six A2A search algorithms
+
+Choose the search algorithm independently of the traffic prediction model in the
+GUI. The command line accepts `--algorithm DFS`, `BFS`, `GBFS`, `AS`, `CUS1`
+or `CUS2`. The default is CUS1.
+
+| Algorithm | Search objective |
+|---|---|
+| DFS | Follow a branch deeply before trying the next branch |
+| BFS | Fewest road links using a FIFO queue |
+| GBFS | Lowest estimated remaining travel cost |
+| AS (A*) | Accumulated travel time plus an admissible heuristic |
+| CUS1 | Lowest accumulated travel time using uniform-cost search |
+| CUS2 | Fewest links using a hop-based admissible heuristic |
+
+All six reuse their A2A implementations. Their `routes()` generators extend
+single-result `search()` compatibility to multiple alternatives. Coordinates are
+provided to the original scaled Euclidean heuristic. The scale is bounded by
+the modeled edge costs, maintaining admissibility for A*.
+
+DFS, BFS, GBFS and CUS2 can return slower driving routes than A* or CUS1.
+The GUI orders the returned candidates by validated estimated time and labels
+the first as the best returned option. Whole-trip driving validation can alter
+leg distances and costs, so this represents the best validated candidate among
+those returned by the chosen search.
+
+Run `python -m tests.test_search_scenarios` for 15 synthetic cases across all six
+algorithms and a CSV of 90 results. See [the testing notes](reports/search_testing.md)
+for case purposes, expected behavior and real-workbook integration results.
+
+
+## Choose real test routes in the main planner
+
+The **Test route (15 real trips)** dropdown sits directly below **Search algorithm**.
+Select a preset to fill the origin, destination, date, time and requested route
+count, then click **Find routes**. Keep the preset selected while changing search
+algorithms or prediction models to compare their results. Editing trip fields
+changes the selector to **Custom trip**.
+
+The 15 presets use the actual Boroondara network and historical traffic pipeline.
+They include a longest modeled trip, central alternatives, short and reverse
+journeys, different corridors, time-of-day comparisons, a weekend departure,
+the assignment example and a zero-length journey. The longest modeled trip is
+the origin/destination pair with the largest shortest-road distance in the
+prepared 40-site network. It does not ask the program to maximize trip duration.
+
+Preset settings are stored in `data/roads/test-routes.json`.
+Recorded full-pipeline results are in `reports/real_route_test_results.csv`.
+The synthetic scenarios remain automated regression fixtures.

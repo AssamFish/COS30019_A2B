@@ -1,0 +1,24 @@
+{
+  "name": "direct_link",
+  "description": "A single road connects start to destination.",
+  "coordinates": {
+    "1": [
+      1.0,
+      0.0
+    ],
+    "4": [
+      4.0,
+      0.0
+    ]
+  },
+  "edges": [
+    [
+      1,
+      4,
+      90
+    ]
+  ],
+  "origin": 1,
+  "destination": 4,
+  "k": 5
+}

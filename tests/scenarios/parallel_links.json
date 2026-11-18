@@ -1,0 +1,43 @@
+{
+  "name": "parallel_links",
+  "description": "Duplicate road entries use the cheapest directed link.",
+  "coordinates": {
+    "1": [
+      1.0,
+      0.0
+    ],
+    "2": [
+      2.0,
+      0.0
+    ],
+    "4": [
+      4.0,
+      0.0
+    ]
+  },
+  "edges": [
+    [
+      1,
+      2,
+      200
+    ],
+    [
+      1,
+      2,
+      30
+    ],
+    [
+      2,
+      4,
+      40
+    ],
+    [
+      1,
+      4,
+      100
+    ]
+  ],
+  "origin": 1,
+  "destination": 4,
+  "k": 5
+}
